@@ -1,9 +1,18 @@
 #ifndef CHATROOM_UTILS_H_
 #define CHATROOM_UTILS_H_
 
+#ifdef __unix__
+#define OS_Windows 0
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+#define OS_Windows 1
+#include <Winsock2.h>
+#endif
+
 #include <stdio.h>
 
 //Enum of different messages possible.
@@ -17,7 +26,7 @@ typedef enum
   TOO_FULL,
   USERNAME_ERROR,
   SUCCESS,
-  ERROR
+  ERRORS //check if works on linux else ERROR
 
 } message_type;
 

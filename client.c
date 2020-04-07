@@ -4,8 +4,16 @@
 #include <unistd.h>
 #include <stdbool.h>
 
+#ifdef __unix__
+#define OS_Windows 0
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+#define OS_Windows 1
+#include <Winsock2.h>
+#endif
 
 #include "chatroom_utils.h"
 
@@ -23,7 +31,7 @@ void get_username(char *username)
     if(strlen(username) > 20)
     {
       puts("Username must be 20 characters or less.");
-    } 
+    }
 	else {
       break;
     }
@@ -69,7 +77,7 @@ void connect_to_server(connection_info *connection, char *address, char *port)
     connection->address.sin_port = htons(atoi(port));
 
     //Connect to remote server
-	//int connect(int sockfd, struct sockaddr *serv_addr, int addrlen); 
+	//int connect(int sockfd, struct sockaddr *serv_addr, int addrlen);
     if (connect(connection->socket, (struct sockaddr *)&connection->address , sizeof(connection->address)) == -1)
     {
         perror("Connect failed.");
@@ -79,8 +87,8 @@ void connect_to_server(connection_info *connection, char *address, char *port)
     set_username(connection);
 
     message msg;
-	//ssize_t recv(int s, void *buf, size_t len, int flags); 
-    ssize_t recv_val = recv(connection->socket, &msg, sizeof(message), 0);
+	ssize_t recv_val = recv(connection->socket, (void*)&msg, sizeof(message), 0);
+    //ssize_t recv_val = recv(connection->socket, &msg, sizeof(message), 0);
     if(recv_val < 0)
     {
         perror("recv failed");
@@ -150,7 +158,7 @@ void handle_user_input(connection_info *connection)
     strncpy(msg.username, toUsername, 20);
     strncpy(msg.data, chatMsg, 255);
 
-    if(send(connection->socket, &msg, sizeof(message), 0) == -1)
+    if(send(connection->socket, (void*)&msg, sizeof(message), 0) == -1)
     {
         perror("Send failed");
         exit(1);
@@ -170,7 +178,7 @@ void handle_user_input(connection_info *connection)
     strncpy(msg.data, input, 255);
 
     //Send some data
-    if(send(connection->socket, &msg, sizeof(message), 0) == -1)
+    if(send(connection->socket, (void*)&msg, sizeof(message), 0) == -1)
     {
         perror("Send failed");
         exit(1);
@@ -183,7 +191,7 @@ void handle_server_message(connection_info *connection)
   message msg;
 
   //Receive a reply from the server
-  ssize_t recv_val = recv(connection->socket, &msg, sizeof(message), 0);
+  ssize_t recv_val = recv(connection->socket, (void*)&msg, sizeof(message), 0);
   if(recv_val == -1)
   {
       perror("recv failed");
@@ -242,7 +250,7 @@ int main(int argc, char *argv[])
   while(true)
   {
     FD_ZERO(&file_descriptors); //Clear all entries from the set
-    FD_SET(STDIN_FILENO, &file_descriptors); // Add fd to the set. 
+    FD_SET(STDIN_FILENO, &file_descriptors); // Add fd to the set.
     FD_SET(connection.socket, &file_descriptors);
     fflush(stdin);
 
@@ -252,7 +260,7 @@ int main(int argc, char *argv[])
       exit(1);
     }
 
-	// Return true if fd is in the set. 
+	// Return true if fd is in the set.
     if(FD_ISSET(STDIN_FILENO, &file_descriptors))
     {
       handle_user_input(&connection);

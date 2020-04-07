@@ -4,10 +4,17 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <errno.h>
-//VISKAS OK, TIK REIKIA PRITAIKYTI IR WINDOWS SISTEMAI
+
+#ifdef __unix__
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <Winsock2.h>
+#include <ws2tcpip.h>
+#endif
 
 #include <pthread.h>
 
@@ -17,8 +24,8 @@
 
 void initialize_server(connection_info *server_info, int port)
 {
-   /*int socket(int domain, int type, int protocol); 
-   *The most correct thing to do is to use 
+   /*int socket(int domain, int type, int protocol);
+   *The most correct thing to do is to use
    *AF_INET in your struct sockaddr_in and PF_INET in your call to socket(). - BJ */
   if((server_info->socket = socket(PF_INET, SOCK_STREAM, 0)) == -1)
   {
@@ -39,8 +46,8 @@ void initialize_server(connection_info *server_info, int port)
 
   const int optVal = 1; //true
   const socklen_t optLen = sizeof(optVal);
-  // SO_REUSEADDR - Allows other sockets to bind() to this port,unless there is an 
-  // active listening socket bound to the portal ready. This enables you to get around 
+  // SO_REUSEADDR - Allows other sockets to bind() to this port,unless there is an
+  // active listening socket bound to the portal ready. This enables you to get around
   // those “Address already in use” error messages when you try to restart your server after acrash.
   // int setsockopt(int s, int level, int optname, const void *optval, socklen_t optlen);
   if(setsockopt(server_info->socket, SOL_SOCKET, SO_REUSEADDR, (void*) &optVal, optLen) == -1)
@@ -64,14 +71,14 @@ void send_public_message(connection_info clients[], int sender, char *message_te
   msg.type = PUBLIC_MESSAGE;
   strncpy(msg.username, clients[sender].username, 20);
   strncpy(msg.data, message_text, 256);
-  
+
   for(int i = 0; i < MAX_CLIENTS; i++)
   {
     if(i != sender && clients[i].socket != 0)
     {
 	  //ssize_t send(int s, const void *buf, size_t len, int flags); 0-"normal" data
 	  //sendto for SOCK_DGRAM
-      if(send(clients[i].socket, &msg, sizeof(msg), 0) == -1)
+      if(send(clients[i].socket, (void*)&msg, sizeof(msg), 0) == -1)
       {
           perror("Send failed");
           exit(1);
@@ -91,7 +98,7 @@ void send_private_message(connection_info clients[], int sender, char *username,
   {
     if(i != sender && clients[i].socket != 0 && strcmp(clients[i].username, username) == 0)
     {
-      if(send(clients[i].socket, &msg, sizeof(msg), 0) == -1)
+      if(send(clients[i].socket, (void*)&msg, sizeof(msg), 0) == -1)
       {
           perror("Send failed");
           exit(1);
@@ -103,7 +110,7 @@ void send_private_message(connection_info clients[], int sender, char *username,
   msg.type = USERNAME_ERROR;
   sprintf(msg.data, "Username \"%s\" does not exist or is not logged in.", username);
 
-  if(send(clients[sender].socket, &msg, sizeof(msg), 0) == -1)
+  if(send(clients[sender].socket, (void*)&msg, sizeof(msg), 0) == -1)
   {
       perror("Send failed");
       exit(1);
@@ -123,15 +130,15 @@ void send_connect_message(connection_info *clients, int sender)
       if(i == sender)
       {
         msg.type = SUCCESS;
-        if(send(clients[i].socket, &msg, sizeof(msg), 0) == -1)
+        if(send(clients[i].socket, (void*)&msg, sizeof(msg), 0) == -1)
         {
             perror("Send failed");
             exit(1);
         }
       }
-	  else 
+	  else
 	  {
-        if(send(clients[i].socket, &msg, sizeof(msg), 0) == -1)
+        if(send(clients[i].socket, (void*)&msg, sizeof(msg), 0) == -1)
         {
             perror("Send failed");
             exit(1);
@@ -151,7 +158,7 @@ void send_disconnect_message(connection_info *clients, char *username)
   {
     if(clients[i].socket != 0)
     {
-      if(send(clients[i].socket, &msg, sizeof(msg), 0) == -1)
+      if(send(clients[i].socket, (void*)&msg, sizeof(msg), 0) == -1)
       {
           perror("Send failed");
           exit(1);
@@ -165,7 +172,7 @@ void send_too_full_message(int socket)
   message too_full_message;
   too_full_message.type = TOO_FULL;
 
-  if(send(socket, &too_full_message, sizeof(too_full_message), 0) == -1)
+  if(send(socket, (void*)&too_full_message, sizeof(too_full_message), 0) == -1)
   {
       perror("Send failed");
       exit(1);
@@ -189,15 +196,15 @@ void handle_client_message(connection_info clients[], int sender)
   int read_size;
   message msg;
 
-  //ssize_t recv(int s, void *buf, size_t len, int flags); 
-  if((read_size = recv(clients[sender].socket, &msg, sizeof(message), 0)) == 0)
+  //ssize_t recv(int s, void *buf, size_t len, int flags);
+  if((read_size = recv(clients[sender].socket, (void*)&msg, sizeof(message), 0)) == 0)
   {
     printf("User disconnected: %s.\n", clients[sender].username);
     close(clients[sender].socket);
     clients[sender].socket = 0;
     send_disconnect_message(clients, clients[sender].username);
 
-  } 
+  }
   else {
 
     switch(msg.type)
@@ -237,8 +244,8 @@ int construct_fd_set(fd_set *set, connection_info *server_info,
                       connection_info clients[])
 {
   FD_ZERO(set); //Clear all entries from the set.
-  FD_SET(STDIN_FILENO, set); 
-  FD_SET(server_info->socket, set); //Add fd to the set. 
+  FD_SET(STDIN_FILENO, set);
+  FD_SET(server_info->socket, set); //Add fd to the set.
 
   int max_fd = server_info->socket;
   for(int i = 0; i < MAX_CLIENTS; i++)
@@ -258,7 +265,7 @@ int construct_fd_set(fd_set *set, connection_info *server_info,
 void handle_new_connection(connection_info *server_info, connection_info clients[])
 {
   int address_len;
-  int new_socket = accept(server_info->socket, (struct sockaddr*)&server_info->address, (socklen_t*)&address_len);
+  int new_socket = accept(server_info->socket, (struct sockaddr*)&server_info->address, (void*)&address_len);
 
   if (new_socket == -1)
   {
@@ -317,7 +324,7 @@ int main(int argc, char *argv[])
     int max_fd = construct_fd_set(&file_descriptors, &server_info, clients);
 
 	//int select(int n, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
-	
+
     if(select(max_fd+1, &file_descriptors, NULL, NULL, NULL) == -1)
     {
       perror("Select Failed");
